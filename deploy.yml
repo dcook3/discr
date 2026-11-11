@@ -1,0 +1,77 @@
+name: Deploy Blazor WASM to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Required for the official Pages deployment actions
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time; don't cancel one that's mid-flight
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  # Path to the Blazor WASM project file (adjust to match your repo)
+  PROJECT_PATH: 'Discr.csproj'
+  # Base path for the site.
+  #   Project site (https://user.github.io/repo/) -> '/<repo-name>/'
+  #   User/org site or custom domain              -> '/'
+  BASE_HREF: '/${{ github.event.repository.name }}/'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore "${{ env.PROJECT_PATH }}"
+
+      # Uncomment if you have a test project
+      # - name: Test
+      #   run: dotnet test --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish "${{ env.PROJECT_PATH }}" --configuration Release --no-restore --output release
+
+      - name: Rewrite base href
+        if: env.BASE_HREF != '/'
+        run: sed -i 's|<base href="/" />|<base href="${{ env.BASE_HREF }}" />|' release/wwwroot/index.html
+
+      # GitHub Pages serves 404.html for unknown paths; reusing index.html
+      # lets the Blazor router handle deep links and page refreshes
+      - name: Add SPA fallback
+        run: cp release/wwwroot/index.html release/wwwroot/404.html
+
+      # Prevents Jekyll from ignoring files/folders starting with an underscore (e.g. _framework)
+      - name: Add .nojekyll
+        run: touch release/wwwroot/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: release/wwwroot
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
