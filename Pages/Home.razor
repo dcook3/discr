@@ -1,7 +1,45 @@
 ﻿@page "/"
+@using Discr.Models
+@using Discr.Services
+@using Microsoft.Extensions.Options
+@using System.Text.Json.Serialization
+@inject IOptions<ApiSettings> ApiSettings
+@inject HttpClient Http
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Testing</h1>
 
-Welcome to your new app.
+<h3>@testMovieTitle</h3>
+<p>@testMovieOverview</p>
+
+
+@code{
+    public string testMovieTitle = string.Empty;
+    public string testMovieOverview = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TestApi();
+    }
+
+    public async Task TestApi()
+    {
+        var apiKey = Uri.EscapeDataString(ApiSettings.Value.ApiKey);
+        var movie = await Http.GetFromJsonAsync<MovieDetails>(
+            $"https://api.themoviedb.org/3/movie/550?api_key={apiKey}")
+            ?? throw new InvalidOperationException("The movie API returned an empty response.");
+
+        testMovieTitle = movie.Title ?? "Not fetched";
+        testMovieOverview = movie.Overview ?? "Not fetched";
+    }
+
+    private sealed class MovieDetails
+    {
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("overview")]
+        public string? Overview { get; set; }
+    }
+}
